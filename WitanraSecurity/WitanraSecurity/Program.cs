@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Configuration;
 using System.IO;
+using System.Drawing;
 using System.Diagnostics;
 
 namespace WitanraSecurity
@@ -13,16 +14,32 @@ namespace WitanraSecurity
     {
         static void Main(string[] args)
         {
+            Console.WriteLine("Getting FTP Images");
             GetFTPImages();
 
+            Console.WriteLine("Normalizing Files");
             NormalizeFiles();
 
+            Console.WriteLine("Making Videos");
             MakeVideos();
+
+            //Console.ReadLine();
+            Environment.Exit(1);
         }
-        
+
+        static void UnhandledExceptionTrapper(object sender, UnhandledExceptionEventArgs e)
+        {
+            Console.WriteLine(e.ExceptionObject.ToString());
+            Console.WriteLine("Press Enter to continue");
+            Console.ReadLine();
+            Environment.Exit(1);
+        }
+
         private static void MakeVideos()
         {
             string Monitor_Dir = ConfigurationManager.AppSettings["Monitor_Dir"];
+            string Temp_Dir = ConfigurationManager.AppSettings["Temp_Dir"];
+           
             string today = DateTime.Today.ToString("yyyyMMdd");
             string[] cameras = Directory.GetDirectories(Monitor_Dir);
             foreach (string camera in cameras)
@@ -30,17 +47,35 @@ namespace WitanraSecurity
                 string[] dates = Directory.GetDirectories(camera);
                 foreach (string date in dates)
                 {
-                    //if (!date.Contains(today))
+                    if (!date.Contains(today))
                     {
+                        try
+                        {
+                            Directory.Delete(Temp_Dir, true);
+                        }
+                        catch { }
+                        Directory.CreateDirectory(Temp_Dir);
                         string[] files = Directory.GetFiles(date, "*.jpg");
                         Array.Sort(files, StringComparer.InvariantCulture);
                         for (int i = 0; i < files.Length; i++)
                         {
-                            File.Move(files[i], date + "\\" + Convert.ToString(i).PadLeft(6, '0') + ".jpg");
+                            AddTimestamp(files[i], files[i].Replace(Monitor_Dir,""));
+                            string oldFile = files[i];
+                            string newFile = Temp_Dir + "\\" + Convert.ToString(i).PadLeft(6, '0') + ".jpg";
+                            File.Move(oldFile, newFile);
+                            Console.WriteLine("Moving file from " + oldFile + " to " + newFile);
                         }
 
-                        LaunchCommandLineApp(date, "ffmpeg.exe", "-y -framerate 5 -i %06d.jpg -c:v libx264 -r 30 -pix_fmt yuv420p " + date + ".mp4");
+                        Console.WriteLine("Saving Video " + Temp_Dir + ".mp4");
+                        LaunchCommandLineApp(Temp_Dir, "ffmpeg.exe", "-y -framerate 5 -i %06d.jpg -c:v libx264 -r 30 -pix_fmt yuv420p " + Temp_Dir + ".mp4");
 
+                        File.Copy(Temp_Dir + ".mp4", date + ".mp4");
+
+                        try
+                        {
+                            Directory.Delete(Temp_Dir, true);
+                        }
+                        catch { }
                         try
                         {
                             Directory.Delete(date, true);
@@ -48,7 +83,6 @@ namespace WitanraSecurity
                         catch { }                       
                     }
                 }
-
             }
         }
 
@@ -58,15 +92,11 @@ namespace WitanraSecurity
             startInfo.CreateNoWindow = false;
             startInfo.UseShellExecute = false;
             startInfo.FileName = exe;
-            startInfo.WindowStyle = ProcessWindowStyle.Hidden;
             startInfo.Arguments = argument;
             startInfo.WorkingDirectory = dir;
-            startInfo.UseShellExecute = false;
-            startInfo.CreateNoWindow = true;
             try
             {
                 Process exeProcess = Process.Start(startInfo);
-                exeProcess.Start();
 
                 exeProcess.WaitForExit();
                 exeProcess.Close();
@@ -81,12 +111,21 @@ namespace WitanraSecurity
             }
         }
 
-        private static void AddTimestamp()
+        private static void AddTimestamp(string filename, string datetime)
         {
-            throw new NotImplementedException();
+            FileStream fs = new FileStream(filename, FileMode.Open, FileAccess.Read);
+            Image image = Image.FromStream(fs);
+            fs.Close();
+
+            Bitmap b = new Bitmap(image);
+            Graphics graphics = Graphics.FromImage(b);
+            graphics.DrawString(datetime, new Font(new FontFamily("Courier New"), 10, FontStyle.Regular), Brushes.Yellow, 0, 0);
+
+            b.Save(filename, image.RawFormat);
+
+            image.Dispose();
+            b.Dispose();
         }
-
-
 
         public static void GetFTPImages()
         {
@@ -97,11 +136,10 @@ namespace WitanraSecurity
             string Monitor_Dir = ConfigurationManager.AppSettings["Monitor_Dir"];
 
             Directory.CreateDirectory(Monitor_Dir);
-            //get list of files at ftp
+
             FTP ftp = new FTP(FTP_Server, FTP_User, FTP_Password);
             files = ftp.Get_List();
-
-            //download and delete
+            
             for (int i = 0; i <= files.Count - 1; i++)
             {
                 files[i] = files[i].Replace(FTP_Server, "/");
@@ -109,15 +147,15 @@ namespace WitanraSecurity
                 {
                     string source = FTP_Server + files[i].ToString();
                     string destination = (Monitor_Dir + files[i].ToString()).Replace("/", "\\");
+                    Console.WriteLine("Downloading " + source + " to " + destination);
                     ftp.Download(source, destination);
-                    //ftp.Delete(source);
+                    ftp.Delete(source);
                 }
             }
         }
 
         private static void NormalizeFiles()
         {
-
             string Monitor_Dir = ConfigurationManager.AppSettings["Monitor_Dir"];
             string[] files = Directory.GetFiles(Monitor_Dir, "*.jpg", SearchOption.AllDirectories);
             Array.Sort(files, StringComparer.InvariantCulture);
@@ -132,8 +170,12 @@ namespace WitanraSecurity
                     newfile = Monitor_Dir + "back\\" + oldfile.Substring(26, 8) + "\\" + oldfile.Substring(34, 6) + "_" + Convert.ToString(i) + ".jpg";
                     Directory.CreateDirectory(Path.GetDirectoryName(newfile));
 
-                    File.Copy(files[i], newfile, true);
-                    File.Delete(files[i]);
+                    Console.WriteLine("Renaming " + files[i] + " to " + newfile);
+                    try {
+                        File.Copy(files[i], newfile, true);
+                        File.Delete(files[i]);
+                    }
+                    catch { }
                 }
 
                 oldfile = files[i].Replace(Monitor_Dir, "");
@@ -142,9 +184,15 @@ namespace WitanraSecurity
                     newfile = Monitor_Dir + "front\\" + oldfile.Substring(28, 8) + "\\" + oldfile.Substring(36, 6) + "_" + Convert.ToString(i) + ".jpg";
                     Directory.CreateDirectory(Path.GetDirectoryName(newfile));
 
-                    File.Copy(files[i], newfile, true);
-                    File.Delete(files[i]);
+                    Console.WriteLine("Renaming " + files[i] + " to " + newfile);
+                    try
+                    {
+                        File.Copy(files[i], newfile, true);
+                        File.Delete(files[i]);
+                    }
+                    catch { }
                 }
+               
             }
         }
     }
