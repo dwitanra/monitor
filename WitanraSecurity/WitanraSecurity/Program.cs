@@ -69,6 +69,7 @@ namespace WitanraSecurity
                         Console.WriteLine("Saving Video " + Temp_Dir + ".mp4");
                         LaunchCommandLineApp(Temp_Dir, "ffmpeg.exe", "-y -framerate 5 -i %06d.jpg -c:v libx264 -r 30 -pix_fmt yuv420p " + Temp_Dir + ".mp4");
 
+                        if (File.Exists(Temp_Dir + ".mp4"))
                         File.Copy(Temp_Dir + ".mp4", date + ".mp4");
 
                         try
