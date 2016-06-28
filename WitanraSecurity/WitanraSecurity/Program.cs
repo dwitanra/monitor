@@ -64,14 +64,16 @@ namespace WitanraSecurity
                     Console.WriteLine("Saving Video " + Temp_Dir + ".mp4");
                     LaunchCommandLineApp(Temp_Dir, "ffmpeg.exe", "-y -framerate 5 -i %06d.jpg -c:v libx264 -r 30 -pix_fmt yuv420p " + Temp_Dir + ".mp4");
 
+                    if (date.Contains(today))
+                    {
+                        if (File.Exists(date + ".mp4"))
+                            File.Delete(date + ".mp4");
+                    }
+
                     if (File.Exists(Temp_Dir + ".mp4"))
                     {
                         if (File.Exists(date + ".mp4"))
-                        {
-                            if (date.Contains(today))
-                            {
-                                File.Delete(date + ".mp4");
-                            }
+                        {                          
                             int i = 1;
                             while (File.Exists(date + '(' + i.ToString() + ')' + ".mp4"))
                             {
