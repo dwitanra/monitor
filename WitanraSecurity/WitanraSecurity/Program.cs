@@ -1,8 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Configuration;
 using System.IO;
 using System.Drawing;
@@ -39,7 +36,7 @@ namespace WitanraSecurity
         {
             string Monitor_Dir = ConfigurationManager.AppSettings["Monitor_Dir"];
             string Temp_Dir = ConfigurationManager.AppSettings["Temp_Dir"];
-           
+
             string today = DateTime.Today.ToString("yyyyMMdd");
             string[] cameras = Directory.GetDirectories(Monitor_Dir);
             foreach (string camera in cameras)
@@ -47,41 +44,64 @@ namespace WitanraSecurity
                 string[] dates = Directory.GetDirectories(camera);
                 foreach (string date in dates)
                 {
-                    if (!date.Contains(today))
+                    try
                     {
-                        try
-                        {
-                            Directory.Delete(Temp_Dir, true);
-                        }
-                        catch { }
-                        Directory.CreateDirectory(Temp_Dir);
-                        string[] files = Directory.GetFiles(date, "*.jpg");
-                        Array.Sort(files, StringComparer.InvariantCulture);
-                        for (int i = 0; i < files.Length; i++)
-                        {
-                            AddTimestamp(files[i], files[i].Replace(Monitor_Dir,""));
-                            string oldFile = files[i];
-                            string newFile = Temp_Dir + "\\" + Convert.ToString(i).PadLeft(6, '0') + ".jpg";
-                            File.Move(oldFile, newFile);
-                            Console.WriteLine("Moving file from " + oldFile + " to " + newFile);
-                        }
+                        Directory.Delete(Temp_Dir, true);
+                    }
+                    catch { }
+                    Directory.CreateDirectory(Temp_Dir);
+                    string[] files = Directory.GetFiles(date, "*.jpg");
+                    Array.Sort(files, StringComparer.InvariantCulture);
+                    for (int i = 0; i < files.Length; i++)
+                    {
+                        AddTimestamp(files[i], files[i].Replace(Monitor_Dir, ""));
+                        string oldFile = files[i];
+                        string newFile = Temp_Dir + "\\" + Convert.ToString(i).PadLeft(6, '0') + ".jpg";
+                        Console.WriteLine("Copying file from " + oldFile + " to " + newFile);
+                        File.Copy(oldFile, newFile);
+                    }
 
-                        Console.WriteLine("Saving Video " + Temp_Dir + ".mp4");
-                        LaunchCommandLineApp(Temp_Dir, "ffmpeg.exe", "-y -framerate 5 -i %06d.jpg -c:v libx264 -r 30 -pix_fmt yuv420p " + Temp_Dir + ".mp4");
+                    Console.WriteLine("Saving Video " + Temp_Dir + ".mp4");
+                    LaunchCommandLineApp(Temp_Dir, "ffmpeg.exe", "-y -framerate 5 -i %06d.jpg -c:v libx264 -r 30 -pix_fmt yuv420p " + Temp_Dir + ".mp4");
 
-                        if (File.Exists(Temp_Dir + ".mp4"))
-                        File.Copy(Temp_Dir + ".mp4", date + ".mp4");
-
-                        try
+                    if (File.Exists(Temp_Dir + ".mp4"))
+                    {
+                        if (File.Exists(date + ".mp4"))
                         {
-                            Directory.Delete(Temp_Dir, true);
+                            if (date.Contains(today))
+                            {
+                                File.Delete(date + ".mp4");
+                            }
+                            int i = 1;
+                            while (File.Exists(date + '(' + i.ToString() + ')' + ".mp4"))
+                            {
+                                i++;
+                            }
+                            File.Copy(Temp_Dir + ".mp4", date + '(' + i.ToString() + ')' + ".mp4");
                         }
-                        catch { }
-                        try
+                        else
+                        {
+                            File.Copy(Temp_Dir + ".mp4", date + ".mp4");
+                        }
+                    }
+                    try
+                    {
+                        Directory.Delete(Temp_Dir, true);
+                    }
+                    catch (Exception ex)
+                    {
+                        ex.ToString();
+                    }
+                    try
+                    {
+                        if (!date.Contains(today))
                         {
                             Directory.Delete(date, true);
                         }
-                        catch { }                       
+                    }
+                    catch (Exception ex)
+                    {
+                        ex.ToString();
                     }
                 }
             }
@@ -114,18 +134,25 @@ namespace WitanraSecurity
 
         private static void AddTimestamp(string filename, string datetime)
         {
-            FileStream fs = new FileStream(filename, FileMode.Open, FileAccess.Read);
-            Image image = Image.FromStream(fs);
-            fs.Close();
+            try
+            {
+                FileStream fs = new FileStream(filename, FileMode.Open, FileAccess.Read);
+                Image image = Image.FromStream(fs);
+                fs.Close();
 
-            Bitmap b = new Bitmap(image);
-            Graphics graphics = Graphics.FromImage(b);
-            graphics.DrawString(datetime, new Font(new FontFamily("Courier New"), 10, FontStyle.Regular), Brushes.Yellow, 0, 0);
+                Bitmap b = new Bitmap(image);
+                Graphics graphics = Graphics.FromImage(b);
+                graphics.DrawString(datetime, new Font(new FontFamily("Courier New"), 10, FontStyle.Regular), Brushes.Yellow, 0, 0);
 
-            b.Save(filename, image.RawFormat);
+                b.Save(filename, image.RawFormat);
 
-            image.Dispose();
-            b.Dispose();
+                image.Dispose();
+                b.Dispose();
+            }
+            catch (Exception ex)
+            {
+                ex.ToString();
+            }
         }
 
         public static void GetFTPImages()
@@ -140,7 +167,7 @@ namespace WitanraSecurity
 
             FTP ftp = new FTP(FTP_Server, FTP_User, FTP_Password);
             files = ftp.Get_List();
-            
+
             for (int i = 0; i <= files.Count - 1; i++)
             {
                 files[i] = files[i].Replace(FTP_Server, "/");
@@ -166,34 +193,43 @@ namespace WitanraSecurity
             for (int i = 0; i < files.Length; i++)
             {
                 oldfile = files[i].Replace(Monitor_Dir, "");
-                if (oldfile.Contains("back\\00626E46E698(Back)_1_"))
+                if (oldfile.Contains("back\\00626E46E698(Back)"))
                 {
-                    newfile = Monitor_Dir + "back\\" + oldfile.Substring(26, 8) + "\\" + oldfile.Substring(34, 6) + "_" + Convert.ToString(i) + ".jpg";
-                    Directory.CreateDirectory(Path.GetDirectoryName(newfile));
+                    try
+                    {
+                        newfile = Monitor_Dir + "back\\" + oldfile.Substring(26, 8) + "\\" + oldfile.Substring(34, 6) + "_" + Convert.ToString(i) + ".jpg";
+                        Directory.CreateDirectory(Path.GetDirectoryName(newfile));
 
-                    Console.WriteLine("Renaming " + files[i] + " to " + newfile);
-                    try {
+                        Console.WriteLine("Renaming " + files[i] + " to " + newfile);
+
                         File.Copy(files[i], newfile, true);
                         File.Delete(files[i]);
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        ex.ToString();
+                    }
                 }
 
                 oldfile = files[i].Replace(Monitor_Dir, "");
                 if (oldfile.Contains("front\\00626E4A420A(Front)"))
                 {
-                    newfile = Monitor_Dir + "front\\" + oldfile.Substring(28, 8) + "\\" + oldfile.Substring(36, 6) + "_" + Convert.ToString(i) + ".jpg";
-                    Directory.CreateDirectory(Path.GetDirectoryName(newfile));
-
-                    Console.WriteLine("Renaming " + files[i] + " to " + newfile);
                     try
                     {
+                        newfile = Monitor_Dir + "front\\" + oldfile.Substring(28, 8) + "\\" + oldfile.Substring(36, 6) + "_" + Convert.ToString(i) + ".jpg";
+                        Directory.CreateDirectory(Path.GetDirectoryName(newfile));
+
+                        Console.WriteLine("Renaming " + files[i] + " to " + newfile);
+
                         File.Copy(files[i], newfile, true);
                         File.Delete(files[i]);
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        ex.ToString();
+                    }
                 }
-               
+
             }
         }
     }
