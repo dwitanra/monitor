@@ -15,9 +15,6 @@ namespace WitanraSecurity
             Console.WriteLine("Getting FTP Images");
             GetFTPImages();
 
-            Console.WriteLine("Normalizing Files");
-            NormalizeFiles();
-
             Console.WriteLine("Making Videos");
             MakeVideos();
 
@@ -54,22 +51,26 @@ namespace WitanraSecurity
                     string source = FTP_Server + files[i].ToString();
                     string destination = (Monitor_Dir + files[i].ToString()).Replace("/", "\\");
 
-                    var regex = new Regex(@"(20\d\d\d\d\d\d\d\d)(\d\d\d\d)");
-                    var match = regex.Match(destination);
+                    string camera = "unknown";
+                    string date = "unknown";
+                    string time = "unknown";
+                    var regex = new Regex(@"\\(.*)\\.*(2\d{7})(\d{6})");
+                    var match = regex.Match(destination.Replace(Monitor_Dir, ""));
                     if (match.Success)
                     {
-                        string date = match.Groups[1].Value;
-                        string time = match.Groups[2].Value;
-
+                        camera = match.Groups[1].Value;
+                        date = match.Groups[2].Value;
+                        time = match.Groups[3].Value;
+                        destination = Monitor_Dir + "\\" + camera + "\\" + date + "\\" + time + "_" + i.ToString() + ".jpg";
                     }
 
                     Console.WriteLine("Downloading " + source + " to " + destination);
                     ftp.Download(source, destination);
+                    AddTimestamp(destination, date + "_" + time);
                     //ftp.Delete(source);
                 }
             }
         }
-     
 
         private static void MakeVideos()
         {
@@ -83,48 +84,35 @@ namespace WitanraSecurity
                 string[] dates = Directory.GetDirectories(camera);
                 foreach (string date in dates)
                 {
+                    if (date.Contains(today))
+                    {
+                        //dont make todays video yet!
+                        continue;
+                    }
+                    string temp = Temp_Dir + ".mp4";
+                    string destination = date + ".mp4";
                     try
                     {
                         Directory.Delete(Temp_Dir, true);
                     }
-                    catch { }
+                    catch
+                    {
+                    }
                     Directory.CreateDirectory(Temp_Dir);
                     string[] files = Directory.GetFiles(date, "*.jpg");
                     Array.Sort(files, StringComparer.InvariantCulture);
                     for (int i = 0; i < files.Length; i++)
                     {
-                        AddTimestamp(files[i], files[i].Replace(Monitor_Dir, ""));
                         string oldFile = files[i];
                         string newFile = Temp_Dir + "\\" + Convert.ToString(i).PadLeft(6, '0') + ".jpg";
                         Console.WriteLine("Copying file from " + oldFile + " to " + newFile);
                         File.Copy(oldFile, newFile);
                     }
 
-                    Console.WriteLine("Saving Video " + Temp_Dir + ".mp4");
-                    LaunchCommandLineApp(Temp_Dir, "ffmpeg.exe", "-y -framerate 5 -i %06d.jpg -c:v libx264 -r 30 -pix_fmt yuv420p " + Temp_Dir + ".mp4");
+                    Console.WriteLine("Saving Video " + temp);
+                    LaunchCommandLineApp(Temp_Dir, "ffmpeg.exe", "-y -framerate 5 -i %06d.jpg -c:v libx264 -r 30 -pix_fmt yuv420p " + temp);
+                    CopySafe(temp, destination);
 
-                    if (date.Contains(today))
-                    {
-                        if (File.Exists(date + ".mp4"))
-                            File.Delete(date + ".mp4");
-                    }
-
-                    if (File.Exists(Temp_Dir + ".mp4"))
-                    {
-                        if (File.Exists(date + ".mp4"))
-                        {                          
-                            int i = 1;
-                            while (File.Exists(date + '(' + i.ToString() + ')' + ".mp4"))
-                            {
-                                i++;
-                            }
-                            File.Copy(Temp_Dir + ".mp4", date + '(' + i.ToString() + ')' + ".mp4");
-                        }
-                        else
-                        {
-                            File.Copy(Temp_Dir + ".mp4", date + ".mp4");
-                        }
-                    }
                     try
                     {
                         Directory.Delete(Temp_Dir, true);
@@ -135,10 +123,7 @@ namespace WitanraSecurity
                     }
                     try
                     {
-                        if (!date.Contains(today))
-                        {
-                            Directory.Delete(date, true);
-                        }
+                        Directory.Delete(date, true);
                     }
                     catch (Exception ex)
                     {
@@ -146,6 +131,23 @@ namespace WitanraSecurity
                     }
                 }
             }
+        }
+
+        private static void CopySafe(string source, string destination)
+        {
+            int count = 1;
+
+            string fileNameOnly = Path.GetFileNameWithoutExtension(destination);
+            string extension = Path.GetExtension(destination);
+            string path = Path.GetDirectoryName(destination);
+
+            while (File.Exists(destination))
+            {
+                string tempFileName = string.Format("{0}({1})", fileNameOnly, count++);
+                destination = Path.Combine(path, tempFileName + extension);
+            }
+
+            File.Copy(source, destination);
         }
 
         private static void LaunchCommandLineApp(string dir, string exe, string argument)
@@ -193,59 +195,6 @@ namespace WitanraSecurity
             catch (Exception ex)
             {
                 ex.ToString();
-            }
-        }
-
-    
-
-        private static void NormalizeFiles()
-        {
-            string Monitor_Dir = ConfigurationManager.AppSettings["Monitor_Dir"];
-            string[] files = Directory.GetFiles(Monitor_Dir, "*.jpg", SearchOption.AllDirectories);
-            Array.Sort(files, StringComparer.InvariantCulture);
-
-            string oldfile;
-            string newfile;
-            for (int i = 0; i < files.Length; i++)
-            {
-                oldfile = files[i].Replace(Monitor_Dir, "");
-                if (oldfile.Contains("back\\00626E46E698(Back)"))
-                {
-                    try
-                    {
-                        newfile = Monitor_Dir + "back\\" + oldfile.Substring(26, 8) + "\\" + oldfile.Substring(34, 6) + "_" + Convert.ToString(i) + ".jpg";
-                        Directory.CreateDirectory(Path.GetDirectoryName(newfile));
-
-                        Console.WriteLine("Renaming " + files[i] + " to " + newfile);
-
-                        File.Copy(files[i], newfile, true);
-                        File.Delete(files[i]);
-                    }
-                    catch (Exception ex)
-                    {
-                        ex.ToString();
-                    }
-                }
-
-                oldfile = files[i].Replace(Monitor_Dir, "");
-                if (oldfile.Contains("front\\00626E4A420A(Front)"))
-                {
-                    try
-                    {
-                        newfile = Monitor_Dir + "front\\" + oldfile.Substring(28, 8) + "\\" + oldfile.Substring(36, 6) + "_" + Convert.ToString(i) + ".jpg";
-                        Directory.CreateDirectory(Path.GetDirectoryName(newfile));
-
-                        Console.WriteLine("Renaming " + files[i] + " to " + newfile);
-
-                        File.Copy(files[i], newfile, true);
-                        File.Delete(files[i]);
-                    }
-                    catch (Exception ex)
-                    {
-                        ex.ToString();
-                    }
-                }
-
             }
         }
     }
