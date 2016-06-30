@@ -4,6 +4,7 @@ using System.Configuration;
 using System.IO;
 using System.Drawing;
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 
 namespace WitanraSecurity
 {
@@ -31,6 +32,44 @@ namespace WitanraSecurity
             Console.ReadLine();
             Environment.Exit(1);
         }
+
+        public static void GetFTPImages()
+        {
+            List<string> files = new List<string>();
+            string FTP_Server = ConfigurationManager.AppSettings["FTP_Server"];
+            string FTP_User = ConfigurationManager.AppSettings["FTP_User"];
+            string FTP_Password = ConfigurationManager.AppSettings["FTP_Password"];
+            string Monitor_Dir = ConfigurationManager.AppSettings["Monitor_Dir"];
+
+            Directory.CreateDirectory(Monitor_Dir);
+
+            FTP ftp = new FTP(FTP_Server, FTP_User, FTP_Password);
+            files = ftp.Get_List();
+
+            for (int i = 0; i <= files.Count - 1; i++)
+            {
+                files[i] = files[i].Replace(FTP_Server, "/");
+                if (files[i].Contains("."))
+                {
+                    string source = FTP_Server + files[i].ToString();
+                    string destination = (Monitor_Dir + files[i].ToString()).Replace("/", "\\");
+
+                    var regex = new Regex(@"(20\d\d\d\d\d\d\d\d)(\d\d\d\d)");
+                    var match = regex.Match(destination);
+                    if (match.Success)
+                    {
+                        string date = match.Groups[1].Value;
+                        string time = match.Groups[2].Value;
+
+                    }
+
+                    Console.WriteLine("Downloading " + source + " to " + destination);
+                    ftp.Download(source, destination);
+                    //ftp.Delete(source);
+                }
+            }
+        }
+     
 
         private static void MakeVideos()
         {
@@ -157,32 +196,7 @@ namespace WitanraSecurity
             }
         }
 
-        public static void GetFTPImages()
-        {
-            List<string> files = new List<string>();
-            string FTP_Server = ConfigurationManager.AppSettings["FTP_Server"];
-            string FTP_User = ConfigurationManager.AppSettings["FTP_User"];
-            string FTP_Password = ConfigurationManager.AppSettings["FTP_Password"];
-            string Monitor_Dir = ConfigurationManager.AppSettings["Monitor_Dir"];
-
-            Directory.CreateDirectory(Monitor_Dir);
-
-            FTP ftp = new FTP(FTP_Server, FTP_User, FTP_Password);
-            files = ftp.Get_List();
-
-            for (int i = 0; i <= files.Count - 1; i++)
-            {
-                files[i] = files[i].Replace(FTP_Server, "/");
-                if (files[i].Contains("."))
-                {
-                    string source = FTP_Server + files[i].ToString();
-                    string destination = (Monitor_Dir + files[i].ToString()).Replace("/", "\\");
-                    Console.WriteLine("Downloading " + source + " to " + destination);
-                    ftp.Download(source, destination);
-                    ftp.Delete(source);
-                }
-            }
-        }
+    
 
         private static void NormalizeFiles()
         {
