@@ -67,7 +67,7 @@ namespace WitanraSecurity
                     Console.WriteLine("Downloading " + source + " to " + destination);
                     ftp.Download(source, destination);
                     AddTimestamp(destination, date + "_" + time);
-                    //ftp.Delete(source);
+                    ftp.Delete(source);
                 }
             }
         }
